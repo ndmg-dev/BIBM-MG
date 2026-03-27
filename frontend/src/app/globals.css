@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-gold: #D4AF37;
+  --color-brand-black: #0c0c0c;
+  --color-brand-silver: #27272a;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-brand-black);
+    color: #ffffff;
+  }
+}
