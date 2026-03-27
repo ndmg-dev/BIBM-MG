@@ -31,10 +31,11 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Always allow the auth/callback route and the login route
+  // Always allow the auth/callback route, login route and api endpoints
   if (
     request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/auth/callback')
+    request.nextUrl.pathname.startsWith('/auth/callback') ||
+    request.nextUrl.pathname.startsWith('/api/')
   ) {
     return supabaseResponse
   }
