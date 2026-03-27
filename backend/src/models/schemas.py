@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
+class Company(BaseModel):
+    id: str
+    name: str
+    cnpj: Optional[str] = None
+
 class DreRecord(BaseModel):
     period: str
     account_name: str
@@ -10,6 +15,7 @@ class DreRecord(BaseModel):
     account_type: str
     value: float
     percentage: float
+    company_id: Optional[str] = None
 
 class KpiCard(BaseModel):
     title: str
