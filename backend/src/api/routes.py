@@ -46,11 +46,21 @@ async def upload_dre(
         company_id = get_or_create_company(company_name.strip())
         df = parse_dre_excel(temp_path)
 
+        if df.empty:
+            raise HTTPException(status_code=422, detail="Nenhum registro de DRE foi encontrado no arquivo. Verifique o padrão da planilha.")
+
+        # Criar histórico de importação
+        import_res = supabase.table('imports_history').insert({
+            "company_id": company_id,
+            "file_name": file.filename,
+            "status": "SUCCESS"
+        }).execute()
+        import_id = import_res.data[0]['id']
+
         data_to_insert = []
         for row in df.to_dict('records'):
             row['company_id'] = company_id
-            # Remove campos que não existem na tabela
-            row.pop('account_raw', None)
+            row['import_id'] = import_id
             data_to_insert.append(row)
 
         supabase.table('dre_records').insert(data_to_insert).execute()
@@ -59,6 +69,7 @@ async def upload_dre(
         return {
             "message": f"Planilha de '{company_name}' importada com sucesso!",
             "company_id": company_id,
+            "import_id": import_id,
             "total_records_saved": len(data_to_insert),
         }
     except Exception as e:
