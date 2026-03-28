@@ -26,7 +26,7 @@ function LoginContent() {
         }
       },
     });
-    
+
     if (error) {
       setLoading(false);
     }
@@ -36,23 +36,23 @@ function LoginContent() {
     <div className="min-h-screen bg-[#0c0c0c] flex flex-col justify-center items-center p-4">
       <div className="bg-[#111111] border border-[#27272a] rounded-xl p-8 max-w-sm w-full text-center shadow-2xl relative overflow-hidden group">
         <div className="absolute top-0 left-0 w-full h-1 bg-[#d4af37]"></div>
-        
+
         <div className="mb-8 flex flex-col items-center">
-            <Image src={logoPic} alt="Mendonça Galvão" width={140} height={140} className="mb-4 object-contain" />
-            <h1 className="text-2xl font-bold tracking-tight text-white mb-2">
-                Casa Brasilis <span className="text-[#D4AF37]">Marine</span>
-            </h1>
-            <p className="text-[#a1a1aa] text-sm">Painel Executivo Restrito</p>
+          <Image src={logoPic} alt="Mendonça Galvão" width={140} height={140} className="mb-4 object-contain" />
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-2">
+            B.I Solutions MG <span className="text-[#D4AF37]">Marine</span>
+          </h1>
+          <p className="text-[#a1a1aa] text-sm">Painel Executivo Restrito</p>
         </div>
 
         {errorMsg && (
-            <div className="bg-[#f43f5e]/10 border border-[#f43f5e]/50 text-[#f43f5e] text-xs p-3 rounded-lg mb-6">
-                {errorMsg}
-            </div>
+          <div className="bg-[#f43f5e]/10 border border-[#f43f5e]/50 text-[#f43f5e] text-xs p-3 rounded-lg mb-6">
+            {errorMsg}
+          </div>
         )}
 
-        <button 
-          onClick={handleGoogleLogin} 
+        <button
+          onClick={handleGoogleLogin}
           disabled={loading}
           className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-black font-semibold rounded-lg text-sm px-5 py-3 transition-colors disabled:opacity-50"
         >

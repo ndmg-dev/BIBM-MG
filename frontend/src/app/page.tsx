@@ -3,7 +3,6 @@ import DRETable from '@/components/DRETable';
 import EvolutionChart from '@/components/EvolutionChart';
 import CompositionChart from '@/components/CompositionChart';
 import DashboardFilters from '@/components/DashboardFilters';
-import Image from 'next/image';
 
 const API_BASE = process.env.NODE_ENV === 'production'
   ? 'http://backend:8000/api/v1'
@@ -51,24 +50,15 @@ export default async function Home(props: { searchParams: Promise<any> | any }) 
   return (
     <div className="min-h-screen bg-[#0c0c0c] text-white p-8 font-sans">
       <header className="mb-8 border-b border-[#27272a] pb-6 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <Image
-            src="/logo.png"
-            alt="Mendonça Galvão Logo"
-            width={48}
-            height={48}
-            className="rounded-md object-contain"
-          />
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white mb-1">
-              {firstName ? (
-                <>{firstName} <span className="text-[#D4AF37]">{lastWord}</span></>
-              ) : (
-                <span className="text-[#D4AF37]">{lastWord}</span>
-              )}
-            </h1>
-            <p className="text-[#a1a1aa] text-sm hidden sm:block">Painel Executivo e D.R.E. Analítica</p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">
+            {firstName ? (
+              <>{firstName} <span className="text-[#D4AF37]">{lastWord}</span></>
+            ) : (
+              <span className="text-[#D4AF37]">{lastWord}</span>
+            )}
+          </h1>
+          <p className="text-[#a1a1aa] text-sm hidden sm:block">Painel Executivo e D.R.E. Analítica</p>
         </div>
         <div className="h-10 w-10 bg-[#1a1a1c] border border-[#d4af37]/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.15)]">
           <span className="text-[#D4AF37] font-bold text-sm">MG</span>

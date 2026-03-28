@@ -1,16 +1,15 @@
 "use client";
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Company {
   id: string;
   name: string;
 }
 
-const API_BASE = process.env.NODE_ENV === 'production'
-  ? 'http://backend:8000/api/v1'
-  : 'http://localhost:8000/api/v1';
+// O next.config.ts já tem rewrite: /api/v1/* → backend:8000. Usar caminho relativo.
+const CLIENT_API_BASE = '/api/v1';
 
 export default function DashboardFilters() {
   const router = useRouter();
@@ -20,87 +19,159 @@ export default function DashboardFilters() {
   const currentTarget  = searchParams.get('target') || '01/2026';
   const currentBase    = searchParams.get('base')   || '02/2026';
 
-  const [company, setCompany]   = useState(currentCompany);
-  const [target,  setTarget]    = useState(currentTarget);
-  const [base,    setBase]      = useState(currentBase);
+  const [company, setCompany]     = useState(currentCompany);
+  const [target, setTarget]       = useState(currentTarget);
+  const [base, setBase]           = useState(currentBase);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [open, setOpen]           = useState(false);
+  const dropdownRef               = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch(`${API_BASE}/companies`)
+    setLoading(true);
+    fetch(`${CLIENT_API_BASE}/companies`)
       .then(r => r.json())
       .then(data => {
-        setCompanies(data);
-        // Seleciona automaticamente a primeira empresa se nenhuma for selecionada
-        if (!company && data.length > 0) {
+        setCompanies(data || []);
+        if (!currentCompany && data?.length > 0) {
           setCompany(data[0].id);
         }
       })
-      .catch(() => {});
+      .catch(() => setCompanies([]))
+      .finally(() => setLoading(false));
   }, []);
 
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedCompany = companies.find(c => c.id === company);
+
   const applyFilters = () => {
+    if (!company) return;
+    setOpen(false);
     router.push(
       `/?company_id=${encodeURIComponent(company)}&target=${encodeURIComponent(target)}&base=${encodeURIComponent(base)}`
     );
   };
 
-  const periodOptions = ['01/2026', '02/2026', 'Saldo '];
+  const periodOptions = [
+    { value: '01/2026', label: 'Janeiro 2026' },
+    { value: '02/2026', label: 'Fevereiro 2026' },
+    { value: 'Saldo ',  label: 'Acumulado (YTD)' },
+  ];
 
   const selectClass =
-    "bg-[#1a1a1c] border border-[#27272a] text-white text-sm rounded-lg focus:ring-[#d4af37] focus:border-[#d4af37] block w-full p-2.5 outline-none";
+    "bg-[#1a1a1c] border border-[#27272a] text-white text-sm rounded-lg focus:ring-[#d4af37] focus:border-[#d4af37] block w-full p-2.5 outline-none appearance-none cursor-pointer transition-colors hover:border-[#d4af37]/50";
 
   return (
-    <div className="flex flex-wrap items-end gap-3 bg-[#111111] p-4 rounded-xl border border-[#27272a] shadow-lg mb-8">
-      
-      {/* Seletor de Empresa */}
-      <div className="flex flex-col min-w-[200px]">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1 font-semibold">
+    <div className="flex flex-wrap items-end gap-4 bg-[#111111] p-5 rounded-xl border border-[#27272a] shadow-lg mb-8">
+
+      {/* Seletor de Empresa — Custom Dropdown */}
+      <div className="flex flex-col min-w-[240px] flex-1" ref={dropdownRef}>
+        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
           Empresa
         </label>
-        <select
-          value={company}
-          onChange={e => setCompany(e.target.value)}
-          className={selectClass}
-        >
-          <option value="" disabled>Selecione...</option>
-          {companies.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setOpen(prev => !prev)}
+            className={`w-full text-left flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-sm transition-all outline-none
+              ${open
+                ? 'border-[#d4af37] bg-[#1a1a1c] shadow-[0_0_0_3px_rgba(212,175,55,0.15)]'
+                : 'border-[#27272a] bg-[#1a1a1c] hover:border-[#d4af37]/50'
+              }
+              ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
+            `}
+            disabled={loading}
+          >
+            <span className={selectedCompany ? 'text-white font-medium' : 'text-[#71717a]'}>
+              {loading
+                ? 'Carregando empresas...'
+                : selectedCompany
+                  ? selectedCompany.name
+                  : companies.length === 0
+                    ? 'Nenhuma empresa cadastrada'
+                    : 'Selecione uma empresa...'}
+            </span>
+            <svg
+              className={`w-4 h-4 text-[#d4af37] transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Lista de opções */}
+          {open && companies.length > 0 && (
+            <div className="absolute z-50 mt-1 w-full bg-[#18181b] border border-[#d4af37]/30 rounded-lg shadow-2xl overflow-hidden animate-fadeIn">
+              <div className="p-1">
+                {companies.map((c, i) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => { setCompany(c.id); setOpen(false); }}
+                    className={`w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors flex items-center gap-3
+                      ${company === c.id
+                        ? 'bg-[#d4af37]/10 text-[#d4af37] font-semibold'
+                        : 'text-[#d4d4d8] hover:bg-[#27272a] hover:text-white'
+                      }
+                    `}
+                  >
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0
+                      ${company === c.id ? 'bg-[#d4af37] text-black' : 'bg-[#27272a] text-[#a1a1aa]'}
+                    `}>
+                      {c.name.charAt(0)}
+                    </span>
+                    {c.name}
+                    {company === c.id && (
+                      <svg className="w-4 h-4 ml-auto text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Período Referência */}
       <div className="flex flex-col">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1 font-semibold">
+        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
           Mês Atual (Referência)
         </label>
         <select value={target} onChange={e => setTarget(e.target.value)} className={selectClass}>
           {periodOptions.map(opt => (
-            <option key={opt} value={opt}>
-              {opt === 'Saldo ' ? 'Acumulado (YTD)' : opt}
-            </option>
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
       </div>
 
       {/* Comparar Com */}
       <div className="flex flex-col">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1 font-semibold">
+        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
           Comparar com
         </label>
         <select value={base} onChange={e => setBase(e.target.value)} className={selectClass}>
           {periodOptions.map(opt => (
-            <option key={opt} value={opt}>
-              {opt === 'Saldo ' ? 'Acumulado (YTD)' : opt}
-            </option>
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
       </div>
 
       <button
         onClick={applyFilters}
-        disabled={!company}
-        className="text-black bg-[#d4af37] hover:bg-[#b5952f] disabled:opacity-40 disabled:cursor-not-allowed font-bold rounded-lg text-sm px-5 py-2.5 transition-colors h-[42px]"
+        disabled={!company || loading}
+        className="text-black bg-[#d4af37] hover:bg-[#b5952f] disabled:opacity-40 disabled:cursor-not-allowed font-bold rounded-lg text-sm px-6 py-2.5 transition-all h-[42px] shadow-[0_0_15px_rgba(212,175,55,0.2)] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)] active:scale-95"
       >
         Analisar
       </button>
