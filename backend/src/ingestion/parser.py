@@ -54,8 +54,36 @@ def parse_dre_excel(file_path: str):
     for _, row in df.iterrows():
         raw_account = str(row.iloc[0])
         if raw_account == "nan" or raw_account.strip() == "":
-            continue # Pula linhas em branco
-            
+            continue  # Pula linhas em branco
+
+        # ── Filtro de rodapé / metadados do software contábil ──────────────
+        _clean_check = raw_account.strip().upper()
+
+        # 1) Padrões textuais de rodapé (licença de software, datas por extenso)
+        _JUNK_PATTERNS = [
+            "LICENCIADO PARA", "SISTEMA LICENCIADO",
+            "DE JANEIRO DE ", "DE FEVEREIRO DE ", "DE MARÇO DE ",
+            "DE ABRIL DE ",   "DE MAIO DE ",      "DE JUNHO DE ",
+            "DE JULHO DE ",   "DE AGOSTO DE ",    "DE SETEMBRO DE ",
+            "DE OUTUBRO DE ", "DE NOVEMBRO DE ",  "DE DEZEMBRO DE ",
+        ]
+        if any(pat in _clean_check for pat in _JUNK_PATTERNS):
+            continue
+
+        # 2) Se o nome contém um ano (ex: 2025) e todos os valores são 0/NaN → rodapé
+        if re.search(r'\b(19|20)\d{2}\b', raw_account):
+            numeric_vals = []
+            for i in range(1, len(row)):
+                try:
+                    v = float(row.iloc[i])
+                    if not math.isnan(v):
+                        numeric_vals.append(v)
+                except (ValueError, TypeError):
+                    pass
+            if not numeric_vals or all(v == 0.0 for v in numeric_vals):
+                continue
+        # ───────────────────────────────────────────────────────────────────
+
         # Calcula nível de indentação
         space_count = len(raw_account) - len(raw_account.lstrip(' '))
         
