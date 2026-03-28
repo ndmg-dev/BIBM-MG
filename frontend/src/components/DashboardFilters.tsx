@@ -149,11 +149,16 @@ export default function DashboardFilters() {
         <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
           Mês Atual (Referência)
         </label>
-        <select value={target} onChange={e => setTarget(e.target.value)} className={selectClass}>
-          {periodOptions.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+        <div className="relative">
+          <select value={target} onChange={e => setTarget(e.target.value)} className={selectClass}>
+            {periodOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
       </div>
 
       {/* Comparar Com */}
@@ -161,11 +166,16 @@ export default function DashboardFilters() {
         <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
           Comparar com
         </label>
-        <select value={base} onChange={e => setBase(e.target.value)} className={selectClass}>
-          {periodOptions.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+        <div className="relative">
+          <select value={base} onChange={e => setBase(e.target.value)} className={selectClass}>
+            {periodOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
       </div>
 
       <button

@@ -40,7 +40,7 @@ function LoginContent() {
         <div className="mb-8 flex flex-col items-center">
           <Image src={logoPic} alt="Mendonça Galvão" width={140} height={140} className="mb-4 object-contain" />
           <h1 className="text-2xl font-bold tracking-tight text-white mb-2">
-            B.I Solutions MG <span className="text-[#D4AF37]">Marine</span>
+            B.I Solutions <span className="text-[#D4AF37]">MG</span>
           </h1>
           <p className="text-[#a1a1aa] text-sm">Painel Executivo Restrito</p>
         </div>
