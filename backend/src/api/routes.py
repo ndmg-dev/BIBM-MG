@@ -90,6 +90,28 @@ def list_companies():
     return res.data or []
 
 
+@router.get("/periods", response_model=List[str], summary="Períodos disponíveis para uma empresa")
+def list_periods(company_id: str = ""):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase não configurado")
+    query = supabase.table('dre_records').select('period')
+    if company_id:
+        query = query.eq('company_id', company_id)
+    res = query.execute()
+    # Retorna períodos únicos, ordenados cronologicamente
+    periods = sorted(
+        set(r['period'] for r in (res.data or []) if r.get('period')),
+        key=lambda p: (
+            # Ordena "MM/YYYY" como (YYYY, MM); fallback para string
+            (int(p.split('/')[1]), int(p.split('/')[0]))
+            if '/' in p and len(p.split('/')) == 2 and p.split('/')[0].isdigit() and p.split('/')[1].isdigit()
+            else (9999, 99)
+        )
+    )
+    return periods
+
+
+
 # ─────────────────────────────────────────
 # KPIs
 # ─────────────────────────────────────────
