@@ -55,16 +55,20 @@ def build_evolution_series(records: List[DreRecord]) -> List[ChartSeriesPoint]:
         g = grouped[p]
         receita = _extract_metric(g, "RECEITA LÍQUIDA")
         custos = _extract_metric(g, "CUSTOS DOS PRODUTOS VENDIDOS")
-        lucro = _extract_metric(g, "LUCRO/PREJUÍZO:")
-        margem = (lucro / receita * 100) if receita != 0 else 0
+        lucro_bruto = _extract_metric(g, "LUCRO OPERACIONAL BRUTO")
+        lucro_liquido = _extract_metric(g, "LUCRO/PREJUÍZO:")
+        
+        margem_bruta = (lucro_bruto / receita * 100) if receita != 0 else 0
+        margem_liquida = (lucro_liquido / receita * 100) if receita != 0 else 0
         
         # Invert costs to positive for charting intuitively
         series.append(ChartSeriesPoint(
             period=p,
             receita=receita,
             custos=abs(custos),
-            margem=round(margem, 2),
-            lucro_liquido=lucro
+            margem_bruta=round(margem_bruta, 2),
+            margem_liquida=round(margem_liquida, 2),
+            lucro_liquido=lucro_liquido
         ))
     return series
 

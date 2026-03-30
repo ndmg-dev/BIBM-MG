@@ -37,17 +37,29 @@ export default function EvolutionChart({ data }: EvolutionChartProps) {
             <Tooltip 
               contentStyle={{ backgroundColor: '#1a1a1c', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
               itemStyle={{ color: '#fff' }}
-              formatter={(value: number, name: string) => [
-                name === 'margem' ? `${value.toFixed(2)}%` : `R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`, 
-                name === 'receita' ? 'Receita Liq.' : name === 'lucro_liquido' ? 'Lucro' : name === 'custos' ? 'CPV' : 'Margem %'
-              ]}
+              formatter={(value: number, name: string) => {
+                const isMargin = name === 'margem_bruta' || name === 'margem_liquida';
+                const formattedValue = isMargin 
+                  ? `${value.toFixed(2)}%` 
+                  : `R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                  
+                let labelName = name;
+                if (name === 'receita') labelName = 'Receita Líquida';
+                if (name === 'custos') labelName = 'Regimes / Custos';
+                if (name === 'lucro_liquido') labelName = 'Lucro Líquido';
+                if (name === 'margem_bruta') labelName = 'Margem Bruta';
+                if (name === 'margem_liquida') labelName = 'Margem Líquida';
+                
+                return [formattedValue, labelName];
+              }}
               labelStyle={{ color: '#d4af37', fontWeight: 'bold', marginBottom: '8px' }}
             />
             <Legend wrapperStyle={{ paddingTop: '20px' }} />
             <Line yAxisId="left" type="monotone" dataKey="receita" stroke="#e4e4e7" strokeWidth={3} dot={{r: 4, fill: '#e4e4e7', strokeWidth: 0}} activeDot={{r: 6}} name="Receita" />
             <Line yAxisId="left" type="monotone" dataKey="custos" stroke="#f43f5e" strokeWidth={3} dot={{r: 4, fill: '#f43f5e', strokeWidth: 0}} activeDot={{r: 6}} name="Custos" />
             <Line yAxisId="left" type="monotone" dataKey="lucro_liquido" stroke="#d4af37" strokeWidth={4} dot={{r: 5, fill: '#111', stroke: '#d4af37', strokeWidth: 2}} activeDot={{r: 8}} name="Lucro" />
-            <Line yAxisId="right" type="monotone" dataKey="margem" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Margem %" />
+            <Line yAxisId="right" type="monotone" dataKey="margem_bruta" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Margem Bruta %" />
+            <Line yAxisId="right" type="monotone" dataKey="margem_liquida" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Margem Liq. %" />
           </LineChart>
         </ResponsiveContainer>
       </div>

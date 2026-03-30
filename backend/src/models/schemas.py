@@ -27,6 +27,9 @@ class DreNode(BaseModel):
     account_name: str
     value: float
     percentage: float
+    base_value: float = 0.0
+    base_percentage: float = 0.0
+    ah_percentage: float = 0.0
     children: List['DreNode'] = []
     
 DreNode.model_rebuild()
@@ -42,7 +45,8 @@ class ChartSeriesPoint(BaseModel):
     period: str
     receita: float
     custos: float
-    margem: float
+    margem_bruta: float
+    margem_liquida: float
     lucro_liquido: float
 
 class CompositionPoint(BaseModel):

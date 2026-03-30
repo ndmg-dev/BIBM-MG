@@ -47,6 +47,18 @@ export default async function Home(props: { searchParams: Promise<any> | any }) 
   const lastWord    = nameParts.pop();
   const firstName   = nameParts.join(' ');
 
+  const getLabel = (periods: string) => {
+    if(!periods) return 'Período';
+    const arr = periods.split(',');
+    if(arr.length === 1) return arr[0] === 'Saldo ' || arr[0] === 'Saldo' ? 'YTD' : arr[0];
+    if(arr.length === 3) return `Trimestre (${arr[0].substring(3)} - ${arr[1].substring(3)} - ${arr[2].substring(3)})`;
+    if(arr.length > 3) return `Agrupado (${arr.length} Meses)`;
+    return `Agrupado (${arr.length})`;
+  };
+
+  const targetLabelName = getLabel(targetPeriod);
+  const baseLabelName = getLabel(basePeriod);
+
   return (
     <div className="min-h-screen bg-[#0c0c0c] text-white p-8 font-sans">
       <header className="mb-8 border-b border-[#27272a] pb-6 flex justify-between items-center">
@@ -104,10 +116,11 @@ export default async function Home(props: { searchParams: Promise<any> | any }) 
 
             {dreTree.length > 0 && (
               <section className="bg-[#111111] border border-[#27272a] rounded-xl p-6 shadow-xl w-full">
-                <h3 className="text-white text-lg font-bold mb-4">
-                  Demonstração do Resultado Analítica — {targetPeriod === 'Saldo ' ? 'Acumulado YTD' : targetPeriod}
-                </h3>
-                <DRETable data={dreTree} />
+                <DRETable 
+                  data={dreTree} 
+                  targetLabel={targetLabelName}
+                  baseLabel={baseLabelName}
+                />
               </section>
             )}
           </>
