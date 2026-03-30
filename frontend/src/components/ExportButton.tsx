@@ -1,36 +1,35 @@
 'use client';
 import React, { useState } from 'react';
-import { Download, FileText, Table as TableIcon } from 'lucide-react';
+import { Download, FileText, Table as TableIcon, Printer } from 'lucide-react';
 import { DreNode } from './DRETable';
 
 interface ExportButtonProps {
   dreData: DreNode[];
   companyName: string;
   targetPeriod: string;
+  basePeriod?: string;
 }
 
-export default function ExportButton({ dreData, companyName, targetPeriod }: ExportButtonProps) {
+export default function ExportButton({ dreData, companyName, targetPeriod, basePeriod }: ExportButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const safeName = (companyName || 'empresa').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-  const safePeriod = (targetPeriod || 'periodo').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+  const fmt = (v: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-  // ─── Flatten DRE tree into flat array for CSV ───
+  // ─── Flatten tree for CSV ───
   const flattenDreData = (nodes: DreNode[], depth = 0): Record<string, string>[] => {
     let result: Record<string, string>[] = [];
     nodes.forEach(node => {
-      const padding = '\u00a0'.repeat(depth * 4); // non-breaking spaces for indentation
       result.push({
-        'Conta Contabil': padding + node.account_name,
-        'Alvo (R$)': node.value.toFixed(2).replace('.', ','),
+        'Conta Contabil': ' '.repeat(depth * 4) + node.account_name,
+        [`${targetPeriod} (R$)`]: node.value.toFixed(2).replace('.', ','),
         'AV Alvo (%)': node.percentage.toFixed(2).replace('.', ',') + '%',
-        'Base (R$)': node.base_value.toFixed(2).replace('.', ','),
+        [`${basePeriod || 'Base'} (R$)`]: node.base_value.toFixed(2).replace('.', ','),
         'AV Base (%)': node.base_percentage.toFixed(2).replace('.', ',') + '%',
         'AH Variacao (%)': node.ah_percentage.toFixed(2).replace('.', ',') + '%',
       });
-      if (node.children && node.children.length > 0) {
+      if (node.children?.length) {
         result = result.concat(flattenDreData(node.children, depth + 1));
       }
     });
@@ -39,129 +38,209 @@ export default function ExportButton({ dreData, companyName, targetPeriod }: Exp
 
   // ─── CSV Export ───
   const exportCSV = () => {
-    const flatData = flattenDreData(dreData);
-    if (flatData.length === 0) return;
-
-    const headers = Object.keys(flatData[0]);
-    const rows = flatData.map(row => headers.map(h => `"${row[h]}"`).join(';'));
-    const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const flat = flattenDreData(dreData);
+    if (!flat.length) return;
+    const headers = Object.keys(flat[0]);
+    const rows = flat.map(row => headers.map(h => `"${row[h]}"`).join(';'));
+    const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `DRE_${safeName}_${safePeriod}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `DRE_${companyName.replace(/\s+/g, '_')}_${targetPeriod.replace(/\//g, '-')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setIsOpen(false);
   };
 
-  // ─── PDF Export (dynamic imports to avoid SSR crash) ───
-  const exportPDF = async () => {
+  // ─── Render DRE rows recursively as HTML string ───
+  const renderRows = (nodes: DreNode[], depth = 0): string => {
+    return nodes.map(node => {
+      const indent = depth * 20;
+      const isParent = depth === 0;
+      const varColor = node.ah_percentage > 0 ? '#16a34a' : node.ah_percentage < 0 ? '#dc2626' : '#6b7280';
+      const varSign = node.ah_percentage > 0 ? '+' : '';
+      const rowBg = isParent ? '#1e1e20' : '#131315';
+      const nameColor = isParent ? '#d4af37' : '#e4e4e7';
+      const fontWeight = isParent ? '700' : '400';
+      const children = node.children?.length ? renderRows(node.children, depth + 1) : '';
+
+      return `
+        <tr style="background:${rowBg}; border-bottom: 1px solid #27272a;">
+          <td style="padding: 8px 12px; padding-left: ${12 + indent}px; color:${nameColor}; font-weight:${fontWeight}; font-size:13px;">
+            ${node.account_name}
+          </td>
+          <td style="padding: 8px 12px; text-align:right; color:#ffffff; font-size:13px;">${fmt(node.value)}</td>
+          <td style="padding: 8px 12px; text-align:right; color:#d4af37; font-size:12px;">${node.percentage.toFixed(2)}%</td>
+          <td style="padding: 8px 12px; text-align:right; color:#9ca3af; font-size:13px;">${fmt(node.base_value)}</td>
+          <td style="padding: 8px 12px; text-align:right; color:#6b7280; font-size:12px;">${node.base_percentage.toFixed(2)}%</td>
+          <td style="padding: 8px 12px; text-align:right; color:${varColor}; font-weight:600; font-size:13px;">${varSign}${node.ah_percentage.toFixed(2)}%</td>
+        </tr>
+        ${children}
+      `;
+    }).join('');
+  };
+
+  // ─── PDF via print-ready HTML page in new window ───
+  const exportPDF = () => {
     setLoading(true);
     setIsOpen(false);
-    setError(null);
 
-    try {
-      // Dynamic imports — only loaded when user clicks, never on SSR
-      const html2canvas = (await import('html2canvas')).default;
-      const jsPDF = (await import('jspdf')).default;
+    const rows = renderRows(dreData);
+    const now = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-      const element = document.getElementById('dashboard-export-wrapper');
-      if (!element) {
-        setError('Elemento do painel não encontrado. Tente novamente.');
-        return;
-      }
-
-      // Temporarily force visibility for capture
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'visible';
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        backgroundColor: '#0c0c0c',
-        useCORS: true,
-        logging: false,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
-        scrollX: 0,
-        scrollY: -window.scrollY,
-      });
-
-      document.body.style.overflow = originalOverflow;
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.85);
-
-      // Landscape A4 for wide dashboards
-      const pdf = new jsPDF('l', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();   // 297mm landscape
-      const pageHeight = pdf.internal.pageSize.getHeight(); // 210mm landscape
-
-      const imgRatio = canvas.height / canvas.width;
-      const imgHeightOnPage = pageWidth * imgRatio;
-
-      // Add header
-      pdf.setFillColor(12, 12, 12);
-      pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-
-      if (imgHeightOnPage <= pageHeight) {
-        // Fits in one page — center vertically
-        const yOffset = (pageHeight - imgHeightOnPage) / 2;
-        pdf.addImage(imgData, 'JPEG', 0, yOffset, pageWidth, imgHeightOnPage);
-      } else {
-        // Multi-page: slice the image
-        let heightLeft = imgHeightOnPage;
-        let srcY = 0;
-        let firstPage = true;
-
-        while (heightLeft > 0) {
-          if (!firstPage) {
-            pdf.addPage();
-            pdf.setFillColor(12, 12, 12);
-            pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-          }
-          pdf.addImage(imgData, 'JPEG', 0, -srcY, pageWidth, imgHeightOnPage);
-          srcY += pageHeight;
-          heightLeft -= pageHeight;
-          firstPage = false;
-        }
-      }
-
-      pdf.save(`Relatorio_BI_${safeName}_${safePeriod}.pdf`);
-    } catch (e) {
-      console.error('PDF export error:', e);
-      setError('Erro ao gerar PDF. Verifique o console para detalhes.');
-    } finally {
-      setLoading(false);
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Relatório B.I — ${companyName}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0c0c0c;
+      color: #e4e4e7;
+      padding: 32px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #27272a;
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+    .header h1 { font-size: 24px; color: #ffffff; font-weight: 700; }
+    .header h1 span { color: #d4af37; }
+    .header .meta { text-align: right; color: #71717a; font-size: 12px; line-height: 1.8; }
+    .badge {
+      display: inline-block;
+      background: #1a1a1c;
+      border: 1px solid #27272a;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #a1a1aa;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #a1a1aa;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    thead tr {
+      background: #0c0c0c;
+      border-bottom: 1px solid #27272a;
+    }
+    thead th {
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      color: #71717a;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    thead th:not(:first-child) { text-align: right; }
+    .footer {
+      margin-top: 28px;
+      border-top: 1px solid #27272a;
+      padding-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #52525b;
+    }
+    @media print {
+      body { padding: 16px; }
+      @page { margin: 10mm; size: A4 landscape; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="badge">Painel Executivo B.I</div>
+      <h1>${companyName.split(' ').slice(0, -1).join(' ')} <span>${companyName.split(' ').slice(-1)[0]}</span></h1>
+      <p style="color:#71717a; font-size:13px; margin-top:4px;">Demonstração do Resultado Analítica</p>
+    </div>
+    <div class="meta">
+      <div>Período Alvo: <strong style="color:#ffffff">${targetPeriod}</strong></div>
+      ${basePeriod ? `<div>Base de Comparação: <strong style="color:#ffffff">${basePeriod}</strong></div>` : ''}
+      <div style="margin-top:4px;">Gerado em: ${now}</div>
+    </div>
+  </div>
+
+  <div class="section-title">D.R.E. — Análise Vertical e Horizontal Comparativa</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Conta Contábil</th>
+        <th style="text-align:right; color:#ffffff">${targetPeriod}</th>
+        <th style="text-align:right; color:#d4af37">AV% (Alvo)</th>
+        <th style="text-align:right; color:#9ca3af">${basePeriod || 'Base'}</th>
+        <th style="text-align:right; color:#6b7280">AV% (Base)</th>
+        <th style="text-align:right">AH% (Variação)</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="footer">
+    <span>Mendonça Galvão — B.I Platform</span>
+    <span>Relatório gerado automaticamente em ${now}</span>
+  </div>
+
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => { window.print(); }, 600);
+    });
+  </script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert('Popup bloqueado! Permita popups para este site e tente novamente.');
+      setLoading(false);
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    setLoading(false);
   };
 
   return (
     <div className="relative">
       <button
-        onClick={() => { setIsOpen(!isOpen); setError(null); }}
+        onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 bg-[#d4af37] text-black px-4 py-2 font-bold rounded-lg hover:bg-[#eacc59] transition-all shadow-[0_0_15px_rgba(212,175,55,0.3)] disabled:opacity-60 text-sm"
         disabled={loading}
       >
-        {loading
-          ? <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-          : <Download size={16} />
-        }
-        {loading ? 'Gerando PDF...' : 'Exportar'}
+        <Download size={16} />
+        Exportar
       </button>
 
-      {error && (
-        <div className="absolute top-12 right-0 mt-2 bg-rose-900/80 border border-rose-700 text-rose-200 text-xs rounded-lg px-3 py-2 min-w-[240px] z-50">
-          {error}
-        </div>
-      )}
-
-      {isOpen && !loading && (
-        <div className="absolute top-12 right-0 mt-2 bg-[#1a1a1c] border border-[#27272a] rounded-lg shadow-2xl overflow-hidden min-w-[240px] z-50">
+      {isOpen && (
+        <div className="absolute top-12 right-0 mt-2 bg-[#1a1a1c] border border-[#27272a] rounded-lg shadow-2xl overflow-hidden min-w-[260px] z-50">
           <div className="px-4 py-2 bg-[#111111] border-b border-[#27272a]">
-            <span className="text-xs uppercase font-bold tracking-widest text-[#a1a1aa]">Formato de Exportação</span>
+            <span className="text-xs uppercase font-bold tracking-widest text-[#a1a1aa]">Exportar Relatório</span>
           </div>
 
           <button
@@ -169,11 +248,11 @@ export default function ExportButton({ dreData, companyName, targetPeriod }: Exp
             className="w-full text-left px-4 py-3 text-white hover:bg-[#27272a] transition-colors flex items-center gap-3 border-b border-[#27272a] focus:outline-none"
           >
             <div className="bg-[#d4af37]/10 p-2 rounded-md flex-shrink-0">
-              <FileText size={18} className="text-[#d4af37]" />
+              <Printer size={18} className="text-[#d4af37]" />
             </div>
             <div>
-              <p className="font-semibold text-sm">Painel Completo (PDF)</p>
-              <p className="text-xs text-[#a1a1aa]">Snapshot do dashboard atual</p>
+              <p className="font-semibold text-sm">DRE Completa (PDF)</p>
+              <p className="text-xs text-[#a1a1aa]">Abre para imprimir ou salvar</p>
             </div>
           </button>
 

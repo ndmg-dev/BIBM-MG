@@ -76,7 +76,8 @@ export default async function Home(props: { searchParams: Promise<any> | any }) 
             <ExportButton 
               dreData={dreTree} 
               companyName={companyName} 
-              targetPeriod={targetLabelName} 
+              targetPeriod={targetLabelName}
+              basePeriod={baseLabelName}
             />
           )}
           <div className="h-10 w-10 bg-[#1a1a1c] border border-[#d4af37]/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.15)] flex-shrink-0">
