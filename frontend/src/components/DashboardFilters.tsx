@@ -15,14 +15,18 @@ export default function DashboardFilters() {
   const searchParams = useSearchParams();
 
   const currentCompany = searchParams.get('company_id') || '';
-  const currentAno = searchParams.get('ano') || '';
-  const currentTrimestre = searchParams.get('trimestre') || 'Todos';
-  const currentMes = searchParams.get('mes') || 'Todos';
+  const initialTarget = searchParams.get('target') || '';
+  const initialBase = searchParams.get('base') || '';
 
   const [company, setCompany] = useState(currentCompany);
-  const [ano, setAno] = useState(currentAno);
-  const [trimestre, setTrimestre] = useState(currentTrimestre);
-  const [mes, setMes] = useState(currentMes);
+  
+  const [alvoAno, setAlvoAno] = useState('');
+  const [alvoTrim, setAlvoTrim] = useState('Todos');
+  const [alvoMes, setAlvoMes] = useState('Todos');
+
+  const [baseAno, setBaseAno] = useState('');
+  const [baseTrim, setBaseTrim] = useState('Todos');
+  const [baseMes, setBaseMes] = useState('Todos');
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [rawPeriods, setRawPeriods] = useState<string[]>([]);
@@ -46,6 +50,29 @@ export default function DashboardFilters() {
       .finally(() => setLoading(false));
   }, []);
 
+  const parsePeriodStr = (pString: string, years: string[]) => {
+    if (!pString) return null;
+    const arr = pString.split(',');
+    if (arr.length === 1 && arr[0].includes('/')) {
+      const [m, y] = arr[0].split('/');
+      return { ano: y, trim: 'Todos', mes: m };
+    }
+    if (arr.length === 3 && arr[0].includes('/')) {
+      const y = arr[0].split('/')[1];
+      const m1 = arr[0].split('/')[0];
+      let trim = 'Todos';
+      if(m1 === '01') trim = '1';
+      else if(m1 === '04') trim = '2';
+      else if(m1 === '07') trim = '3';
+      else if(m1 === '10') trim = '4';
+      return { ano: y, trim, mes: 'Todos' };
+    }
+    if (arr.length >= 12 && arr[0].includes('/')) {
+      return { ano: arr[0].split('/')[1], trim: 'Todos', mes: 'Todos' };
+    }
+    return null;
+  };
+
   useEffect(() => {
     if (!company) { setRawPeriods([]); setAvailableYears([]); return; }
     setPeriodsLoading(true);
@@ -58,13 +85,52 @@ export default function DashboardFilters() {
         const years = Array.from(new Set(p.filter(x => x.includes('/')).map(x => x.split('/')[1]))).sort();
         setAvailableYears(years);
 
-        if (!currentAno && years.length > 0) {
-          setAno(years[years.length - 1]);
+        if (years.length > 0) {
+          // Initialize ALVO
+          if (!alvoAno) {
+            const parsedAlvo = parsePeriodStr(initialTarget, years);
+            if (parsedAlvo && years.includes(parsedAlvo.ano)) {
+              setAlvoAno(parsedAlvo.ano);
+              setAlvoTrim(parsedAlvo.trim);
+              setAlvoMes(parsedAlvo.mes);
+            } else {
+              setAlvoAno(years[years.length - 1]);
+              setAlvoTrim('Todos');
+              setAlvoMes(p.filter(x => x.includes(`/${years[years.length - 1]}`)).map(x=>x.split('/')[0]).pop() || 'Todos');
+            }
+          } else if (!years.includes(alvoAno)) {
+            setAlvoAno(years[years.length - 1]);
+          }
+
+          // Initialize BASE
+          if (!baseAno) {
+            const parsedBase = parsePeriodStr(initialBase, years);
+            if (parsedBase && years.includes(parsedBase.ano)) {
+              setBaseAno(parsedBase.ano);
+              setBaseTrim(parsedBase.trim);
+              setBaseMes(parsedBase.mes);
+            } else {
+              // Default to previous month
+              const allM = p.filter(x => x.includes('/'));
+              if(allM.length >= 2) {
+                const prev = allM[allM.length-2];
+                setBaseAno(prev.split('/')[1]);
+                setBaseTrim('Todos');
+                setBaseMes(prev.split('/')[0]);
+              } else {
+                setBaseAno(years[years.length - 1]);
+                setBaseTrim('Todos');
+                setBaseMes('Todos');
+              }
+            }
+          } else if (!years.includes(baseAno)) {
+             setBaseAno(years[years.length - 1]);
+          }
         }
       })
       .catch(() => { setRawPeriods([]); setAvailableYears([]); })
       .finally(() => setPeriodsLoading(false));
-  }, [company, currentAno]);
+  }, [company]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -84,172 +150,182 @@ export default function DashboardFilters() {
     '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro',
   };
 
-  const computePeriods = (y: string, t: string, m: string) => {
-    let targetArr: string[] = [];
-    let baseArr: string[] = [];
-    
-    if (m !== 'Todos') {
-      targetArr = [`${m}/${y}`];
-      let prevM = parseInt(m) - 1; let prevY = parseInt(y);
-      if (prevM === 0) { prevM = 12; prevY -= 1; }
-      baseArr = [`${prevM.toString().padStart(2, '0')}/${prevY}`];
-    } else if (t !== 'Todos') {
+  const buildPeriodLabel = (y: string, t: string, m: string) => {
+    if (m !== 'Todos') return `${m}/${y}`;
+    if (t !== 'Todos') {
       const quarters: Record<string, string[]> = {
         '1': ['01','02','03'], '2': ['04','05','06'], '3': ['07','08','09'], '4': ['10','11','12']
       };
-      targetArr = quarters[t].map(mm => `${mm}/${y}`);
-      
-      let prevT = parseInt(t) - 1; let prevY = parseInt(y);
-      if (prevT === 0) { prevT = 4; prevY -= 1; }
-      baseArr = quarters[prevT.toString()].map(mm => `${mm}/${prevY}`);
-    } else {
-      const allMonths = ['01','02','03','04','05','06','07','08','09','10','11','12'];
-      targetArr = allMonths.map(mm => `${mm}/${y}`);
-      const prevY = parseInt(y) - 1;
-      baseArr = allMonths.map(mm => `${mm}/${prevY}`);
+      return quarters[t].map(mm => `${mm}/${y}`).join(',');
     }
-    
-    return { target: targetArr.join(','), base: baseArr.join(',') };
+    const allMonths = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    return allMonths.map(mm => `${mm}/${y}`).join(',');
   };
 
   const applyFilters = () => {
-    if (!company || !ano) return;
+    if (!company || !alvoAno || !baseAno) return;
     setOpen(false);
     
-    const { target, base } = computePeriods(ano, trimestre, mes);
+    const target = buildPeriodLabel(alvoAno, alvoTrim, alvoMes);
+    const base = buildPeriodLabel(baseAno, baseTrim, baseMes);
     
     router.push(
-      `/?company_id=${encodeURIComponent(company)}` +
-      `&target=${encodeURIComponent(target)}&base=${encodeURIComponent(base)}` +
-      `&ano=${encodeURIComponent(ano)}&trimestre=${encodeURIComponent(trimestre)}&mes=${encodeURIComponent(mes)}`
+      `/?company_id=${encodeURIComponent(company)}&target=${encodeURIComponent(target)}&base=${encodeURIComponent(base)}`
     );
   };
 
-  const selectClass = "bg-[#1a1a1c] border border-[#27272a] text-white text-sm rounded-lg focus:ring-[#d4af37] focus:border-[#d4af37] block w-full pl-3 pr-9 py-2.5 outline-none appearance-none cursor-pointer transition-colors hover:border-[#d4af37]/50 disabled:opacity-50 disabled:cursor-wait";
+  const selectClass = "bg-[#1a1a1c] border border-[#27272a] text-[#a1a1aa] focus:text-white text-sm rounded-lg focus:ring-[#d4af37] focus:border-[#d4af37] block w-full pl-3 pr-9 py-2 outline-none appearance-none cursor-pointer transition-colors hover:border-[#d4af37]/50 disabled:opacity-50 disabled:cursor-wait";
 
-  const getAvailableMonths = () => {
-    if (trimestre === 'Todos') return Object.keys(monthNames);
-    if (trimestre === '1') return ['01', '02', '03'];
-    if (trimestre === '2') return ['04', '05', '06'];
-    if (trimestre === '3') return ['07', '08', '09'];
-    if (trimestre === '4') return ['10', '11', '12'];
+  const getAvailableMonths = (trim: string) => {
+    if (trim === 'Todos') return Object.keys(monthNames);
+    if (trim === '1') return ['01', '02', '03'];
+    if (trim === '2') return ['04', '05', '06'];
+    if (trim === '3') return ['07', '08', '09'];
+    if (trim === '4') return ['10', '11', '12'];
     return [];
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-4 bg-[#111111] p-5 rounded-xl border border-[#27272a] shadow-lg mb-8">
-      <div className="flex flex-col min-w-[240px] flex-1" ref={dropdownRef}>
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
-          Empresa
-        </label>
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setOpen(prev => !prev)}
-            className={`w-full text-left flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-sm transition-all outline-none
-              ${open ? 'border-[#d4af37] bg-[#1a1a1c] shadow-[0_0_0_3px_rgba(212,175,55,0.15)]' : 'border-[#27272a] bg-[#1a1a1c] hover:border-[#d4af37]/50'}
-              ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
-            `}
-            disabled={loading}
-          >
-            <span className={selectedCompany ? 'text-white font-medium' : 'text-[#71717a]'}>
-              {loading ? 'Carregando empresas...' : selectedCompany ? selectedCompany.name : (companies.length === 0 ? 'Nenhuma empresa cadastrada' : 'Selecione uma empresa...')}
-            </span>
-            <svg className={`w-4 h-4 text-[#d4af37] transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+    <div className="flex flex-col gap-4 bg-[#111111] p-5 rounded-xl border border-[#27272a] shadow-lg mb-8">
+      
+      {/* COMPANY ROW */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 w-full justify-between">
+        <div className="flex flex-col min-w-[280px] w-full sm:w-auto" ref={dropdownRef}>
+          <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
+            Empresa
+          </label>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpen(prev => !prev)}
+              className={`w-full text-left flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-sm transition-all outline-none
+                ${open ? 'border-[#d4af37] bg-[#1a1a1c] shadow-[0_0_0_3px_rgba(212,175,55,0.15)]' : 'border-[#27272a] bg-[#1a1a1c] hover:border-[#d4af37]/50'}
+                ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
+              `}
+              disabled={loading}
+            >
+              <span className={selectedCompany ? 'text-white font-medium' : 'text-[#71717a]'}>
+                {loading ? 'Carregando...' : selectedCompany ? selectedCompany.name : 'Selecione...'}
+              </span>
+              <svg className={`w-4 h-4 text-[#d4af37] transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
-          {open && companies.length > 0 && (
-            <div className="absolute z-50 mt-1 w-full bg-[#18181b] border border-[#d4af37]/30 rounded-lg shadow-2xl overflow-hidden">
-              <div className="p-1">
-                {companies.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => { setCompany(c.id); setOpen(false); }}
-                    className={`w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors flex items-center gap-3
-                      ${company === c.id ? 'bg-[#d4af37]/10 text-[#d4af37] font-semibold' : 'text-[#d4d4d8] hover:bg-[#27272a] hover:text-white'}
-                    `}
-                  >
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${company === c.id ? 'bg-[#d4af37] text-black' : 'bg-[#27272a] text-[#a1a1aa]'}`}>
-                      {c.name.charAt(0)}
-                    </span>
-                    {c.name}
-                    {company === c.id && (
-                      <svg className="w-4 h-4 ml-auto text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                ))}
+            {open && companies.length > 0 && (
+              <div className="absolute z-50 mt-1 w-full bg-[#18181b] border border-[#d4af37]/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="p-1">
+                  {companies.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { setCompany(c.id); setOpen(false); }}
+                      className={`w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors flex items-center gap-3
+                        ${company === c.id ? 'bg-[#d4af37]/10 text-[#d4af37] font-semibold' : 'text-[#d4d4d8] hover:bg-[#27272a] hover:text-white'}
+                      `}
+                    >
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${company === c.id ? 'bg-[#d4af37] text-black' : 'bg-[#27272a] text-[#a1a1aa]'}`}>
+                        {c.name.charAt(0)}
+                      </span>
+                      {c.name}
+                      {company === c.id && (
+                        <svg className="w-4 h-4 ml-auto text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
+          </div>
+        </div>
+        
+        <button
+          onClick={applyFilters}
+          disabled={!company || !alvoAno || !baseAno || loading || periodsLoading}
+          className="text-black bg-[#d4af37] hover:bg-[#b5952f] disabled:opacity-40 disabled:cursor-not-allowed font-bold rounded-lg text-sm px-8 py-2.5 transition-all shadow-[0_0_15px_rgba(212,175,55,0.2)] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)] active:scale-95 whitespace-nowrap"
+        >
+          Aplicar Análise
+        </button>
+      </div>
+
+      <div className="h-px w-full bg-[#27272a] my-2"></div>
+
+      {/* FILTER ROWS */}
+      <div className="flex flex-col xl:flex-row gap-6">
+        
+        {/* ALVO */}
+        <div className="flex-1 flex flex-col gap-2">
+          <label className="text-[#a1a1aa] text-xs uppercase tracking-wider font-semibold flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
+            ALVO (Período Atual)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="relative">
+              <select value={alvoAno} onChange={e => { setAlvoAno(e.target.value); setAlvoTrim('Todos'); setAlvoMes('Todos'); }} disabled={periodsLoading || availableYears.length === 0} className={selectClass}>
+                {periodsLoading ? <option value="">...</option> : availableYears.map(y => <option key={y} value={y}>Ano {y}</option>)}
+              </select>
+              <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
             </div>
-          )}
+            <div className="relative">
+              <select value={alvoTrim} onChange={e => { setAlvoTrim(e.target.value); setAlvoMes('Todos'); }} disabled={periodsLoading || !alvoAno} className={selectClass}>
+                <option value="Todos">Trimestre: Todos</option>
+                <option value="1">1º Trimestre</option>
+                <option value="2">2º Trimestre</option>
+                <option value="3">3º Trimestre</option>
+                <option value="4">4º Trimestre</option>
+              </select>
+              <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </div>
+            <div className="relative">
+              <select value={alvoMes} onChange={e => setAlvoMes(e.target.value)} disabled={periodsLoading || !alvoAno} className={selectClass}>
+                <option value="Todos">Mês: Todos</option>
+                {getAvailableMonths(alvoTrim).map(m => (
+                  <option key={m} value={m}>{monthNames[m]}</option>
+                ))}
+              </select>
+              <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-col min-w-[120px]">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">Anos</label>
-        <div className="relative">
-          <select 
-            value={ano} 
-            onChange={e => { setAno(e.target.value); setTrimestre('Todos'); setMes('Todos'); }} 
-            disabled={periodsLoading || availableYears.length === 0} 
-            className={selectClass}
-          >
-            {periodsLoading && <option value="">...</option>}
-            {!periodsLoading && availableYears.length === 0 && <option value="">Sem dados</option>}
-            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+        {/* BASE */}
+        <div className="flex-1 flex flex-col gap-2">
+          <label className="text-[#a1a1aa] text-xs uppercase tracking-wider font-semibold flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#71717a]"></span>
+            BASE (Comparar Com)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="relative">
+              <select value={baseAno} onChange={e => { setBaseAno(e.target.value); setBaseTrim('Todos'); setBaseMes('Todos'); }} disabled={periodsLoading || availableYears.length === 0} className={selectClass}>
+                {periodsLoading ? <option value="">...</option> : availableYears.map(y => <option key={y} value={y}>Ano {y}</option>)}
+              </select>
+              <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </div>
+            <div className="relative">
+              <select value={baseTrim} onChange={e => { setBaseTrim(e.target.value); setBaseMes('Todos'); }} disabled={periodsLoading || !baseAno} className={selectClass}>
+                <option value="Todos">Trimestre: Todos</option>
+                <option value="1">1º Trimestre</option>
+                <option value="2">2º Trimestre</option>
+                <option value="3">3º Trimestre</option>
+                <option value="4">4º Trimestre</option>
+              </select>
+              <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </div>
+            <div className="relative">
+              <select value={baseMes} onChange={e => setBaseMes(e.target.value)} disabled={periodsLoading || !baseAno} className={selectClass}>
+                <option value="Todos">Mês: Todos</option>
+                {getAvailableMonths(baseTrim).map(m => (
+                  <option key={m} value={m}>{monthNames[m]}</option>
+                ))}
+              </select>
+              <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-col min-w-[140px]">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">Trimestres</label>
-        <div className="relative">
-          <select 
-            value={trimestre} 
-            onChange={e => { setTrimestre(e.target.value); setMes('Todos'); }} 
-            disabled={periodsLoading || !ano} 
-            className={selectClass}
-          >
-            <option value="Todos">Todos</option>
-            <option value="1">1º Trimestre</option>
-            <option value="2">2º Trimestre</option>
-            <option value="3">3º Trimestre</option>
-            <option value="4">4º Trimestre</option>
-          </select>
-          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-        </div>
       </div>
-
-      <div className="flex flex-col min-w-[140px]">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">Meses</label>
-        <div className="relative">
-          <select 
-            value={mes} 
-            onChange={e => setMes(e.target.value)} 
-            disabled={periodsLoading || !ano} 
-            className={selectClass}
-          >
-            <option value="Todos">Todos</option>
-            {getAvailableMonths().map(m => (
-              <option key={m} value={m}>{monthNames[m]}</option>
-            ))}
-          </select>
-          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-        </div>
-      </div>
-
-      <button
-        onClick={applyFilters}
-        disabled={!company || !ano || loading || periodsLoading}
-        className="text-black bg-[#d4af37] hover:bg-[#b5952f] disabled:opacity-40 disabled:cursor-not-allowed font-bold rounded-lg text-sm px-6 py-2.5 transition-all h-[42px] shadow-[0_0_15px_rgba(212,175,55,0.2)] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)] active:scale-95"
-      >
-        Analisar
-      </button>
     </div>
   );
 }
