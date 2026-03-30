@@ -261,24 +261,30 @@ def get_account_history(account_name: str, company_id: str = ""):
     agg = {}
     for r in res.data:
         p = r.get('period')
-        if not p: continue
-        if p not in agg:
-            agg[p] = 0.0
-        # If value is string, convert it
+        if not p:
+            continue
+        # Valida estritamente o formato MM/YYYY
+        parts = str(p).split('/')
+        if len(parts) != 2:
+            continue
+        month_str, year_str = parts
+        if not (month_str.isdigit() and year_str.isdigit()):
+            continue
+        month, year = int(month_str), int(year_str)
+        if not (1 <= month <= 12 and 1900 <= year <= 2100):
+            continue
+        # Normaliza para sempre ter 2 dígitos no mês (ex: "1/2026" → "01/2026")
+        p_normalized = f"{month:02d}/{year}"
+        if p_normalized not in agg:
+            agg[p_normalized] = 0.0
         try:
-            agg[p] += float(r.get('value', 0))
+            agg[p_normalized] += float(r.get('value', 0))
         except (ValueError, TypeError):
             pass
 
-    result = [{"period": p, "value": val} for p, val in agg.items()]
+    result = [{"period": p, "value": round(val, 2)} for p, val in agg.items()]
 
-    # Ordena "MM/YYYY" como (YYYY, MM)
-    result.sort(
-        key=lambda r: (
-            (int(r["period"].split('/')[1]), int(r["period"].split('/')[0]))
-            if '/' in r["period"] and len(r["period"].split('/')) == 2 and r["period"].split('/')[0].isdigit() and r["period"].split('/')[1].isdigit()
-            else (9999, 99)
-        )
-    )
+    # Ordena cronologicamente por (YYYY, MM) — todos os períodos já são MM/YYYY válidos
+    result.sort(key=lambda r: (int(r["period"].split('/')[1]), int(r["period"].split('/')[0])))
 
     return result
