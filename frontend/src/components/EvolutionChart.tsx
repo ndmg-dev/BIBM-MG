@@ -35,20 +35,19 @@ export default function EvolutionChart({ data }: EvolutionChartProps) {
                tickFormatter={(val) => `${val}%`} 
             />
             <Tooltip 
+              shared={false}
               contentStyle={{ backgroundColor: '#1a1a1c', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }}
               itemStyle={{ color: '#fff' }}
               formatter={(value: number, name: string) => {
-                const isMargin = name === 'margem_bruta' || name === 'margem_liquida';
+                const isMargin = name.includes('Margem');
                 const formattedValue = isMargin 
                   ? `${value.toFixed(2)}%` 
                   : `R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
                   
                 let labelName = name;
-                if (name === 'receita') labelName = 'Receita Líquida';
-                if (name === 'custos') labelName = 'Regimes / Custos';
-                if (name === 'lucro_liquido') labelName = 'Lucro Líquido';
-                if (name === 'margem_bruta') labelName = 'Margem Bruta';
-                if (name === 'margem_liquida') labelName = 'Margem Líquida';
+                if (name === 'Receita') labelName = 'Receita Líquida';
+                if (name === 'Custos') labelName = 'Regimes / Custos';
+                if (name === 'Lucro') labelName = 'Lucro Líquido';
                 
                 return [formattedValue, labelName];
               }}

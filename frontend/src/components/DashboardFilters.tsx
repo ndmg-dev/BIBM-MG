@@ -15,19 +15,22 @@ export default function DashboardFilters() {
   const searchParams = useSearchParams();
 
   const currentCompany = searchParams.get('company_id') || '';
-  const currentTarget  = searchParams.get('target') || '';
-  const currentBase    = searchParams.get('base')   || '';
+  const currentAno = searchParams.get('ano') || '';
+  const currentTrimestre = searchParams.get('trimestre') || 'Todos';
+  const currentMes = searchParams.get('mes') || 'Todos';
 
-  const [company, setCompany]     = useState(currentCompany);
-  const [target, setTarget]       = useState(currentTarget);
-  const [base, setBase]           = useState(currentBase);
+  const [company, setCompany] = useState(currentCompany);
+  const [ano, setAno] = useState(currentAno);
+  const [trimestre, setTrimestre] = useState(currentTrimestre);
+  const [mes, setMes] = useState(currentMes);
+
   const [companies, setCompanies] = useState<Company[]>([]);
   const [rawPeriods, setRawPeriods] = useState<string[]>([]);
-  const [filterOptions, setFilterOptions] = useState<{label: string, value: string, group: string}[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [availableYears, setAvailableYears] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [periodsLoading, setPeriodsLoading] = useState(false);
-  const [open, setOpen]           = useState(false);
-  const dropdownRef               = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -44,7 +47,7 @@ export default function DashboardFilters() {
   }, []);
 
   useEffect(() => {
-    if (!company) { setRawPeriods([]); setFilterOptions([]); return; }
+    if (!company) { setRawPeriods([]); setAvailableYears([]); return; }
     setPeriodsLoading(true);
     fetch(`${CLIENT_API_BASE}/periods?company_id=${encodeURIComponent(company)}`)
       .then(r => r.json())
@@ -52,68 +55,16 @@ export default function DashboardFilters() {
         const p = data || [];
         setRawPeriods(p);
         
-        // Build grouped options
-        const months = p.filter(x => x.includes('/'));
-        const rest = p.filter(x => !x.includes('/'));
-        
-        const years: Record<string, string[]> = {};
-        months.forEach(m => {
-          const [mm, yyyy] = m.split('/');
-          if(!years[yyyy]) years[yyyy] = [];
-          years[yyyy].push(m);
-        });
-        
-        const options: {label: string, value: string, group: string}[] = [];
-        
-        // Add Years
-        for (const [y, mList] of Object.entries(years)) {
-          options.push({ label: `Ano ${y}`, value: mList.join(','), group: 'Anuais' });
-        }
-        
-        // Add Quarters
-        for (const [y, mList] of Object.entries(years)) {
-          const q1 = mList.filter(m => ['01','02','03'].includes(m.split('/')[0]));
-          const q2 = mList.filter(m => ['04','05','06'].includes(m.split('/')[0]));
-          const q3 = mList.filter(m => ['07','08','09'].includes(m.split('/')[0]));
-          const q4 = mList.filter(m => ['10','11','12'].includes(m.split('/')[0]));
-          
-          if(q1.length) options.push({ label: `1º Trimestre ${y}`, value: q1.join(','), group: 'Trimestrais' });
-          if(q2.length) options.push({ label: `2º Trimestre ${y}`, value: q2.join(','), group: 'Trimestrais' });
-          if(q3.length) options.push({ label: `3º Trimestre ${y}`, value: q3.join(','), group: 'Trimestrais' });
-          if(q4.length) options.push({ label: `4º Trimestre ${y}`, value: q4.join(','), group: 'Trimestrais' });
-        }
-        
-        // Add Months
-        const monthNames: Record<string, string> = {
-          '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
-          '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
-          '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro',
-        };
-        months.forEach(m => {
-          const [mm, yyyy] = m.split('/');
-          options.push({ label: `${monthNames[mm] || mm} ${yyyy}`, value: m, group: 'Mensais' });
-        });
-        
-        // Add Rest (Saldo)
-        rest.forEach(r => {
-          options.push({ label: r.trim() === 'Saldo' ? 'Acumulado (YTD)' : r, value: r, group: 'Gerais' });
-        });
-        
-        setFilterOptions(options);
+        const years = Array.from(new Set(p.filter(x => x.includes('/')).map(x => x.split('/')[1]))).sort();
+        setAvailableYears(years);
 
-        // Define target/base only if they are not already validly selected (or if first load without initial state)
-        if (options.length > 0) {
-          if (!currentTarget && !currentBase) {
-            const lastMonth = months.length > 0 ? months[months.length - 1] : options[0].value;
-            const prevMonth = months.length > 1 ? months[months.length - 2] : options[0].value;
-            setTarget(lastMonth);
-            setBase(prevMonth);
-          }
+        if (!currentAno && years.length > 0) {
+          setAno(years[years.length - 1]);
         }
       })
-      .catch(() => { setRawPeriods([]); setFilterOptions([]); })
+      .catch(() => { setRawPeriods([]); setAvailableYears([]); })
       .finally(() => setPeriodsLoading(false));
-  }, [company, currentTarget, currentBase]);
+  }, [company, currentAno]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -127,33 +78,62 @@ export default function DashboardFilters() {
 
   const selectedCompany = companies.find(c => c.id === company);
 
+  const monthNames: Record<string, string> = {
+    '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
+    '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
+    '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro',
+  };
+
+  const computePeriods = (y: string, t: string, m: string) => {
+    let targetArr: string[] = [];
+    let baseArr: string[] = [];
+    
+    if (m !== 'Todos') {
+      targetArr = [`${m}/${y}`];
+      let prevM = parseInt(m) - 1; let prevY = parseInt(y);
+      if (prevM === 0) { prevM = 12; prevY -= 1; }
+      baseArr = [`${prevM.toString().padStart(2, '0')}/${prevY}`];
+    } else if (t !== 'Todos') {
+      const quarters: Record<string, string[]> = {
+        '1': ['01','02','03'], '2': ['04','05','06'], '3': ['07','08','09'], '4': ['10','11','12']
+      };
+      targetArr = quarters[t].map(mm => `${mm}/${y}`);
+      
+      let prevT = parseInt(t) - 1; let prevY = parseInt(y);
+      if (prevT === 0) { prevT = 4; prevY -= 1; }
+      baseArr = quarters[prevT.toString()].map(mm => `${mm}/${prevY}`);
+    } else {
+      const allMonths = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+      targetArr = allMonths.map(mm => `${mm}/${y}`);
+      const prevY = parseInt(y) - 1;
+      baseArr = allMonths.map(mm => `${mm}/${prevY}`);
+    }
+    
+    return { target: targetArr.join(','), base: baseArr.join(',') };
+  };
+
   const applyFilters = () => {
-    if (!company) return;
+    if (!company || !ano) return;
     setOpen(false);
+    
+    const { target, base } = computePeriods(ano, trimestre, mes);
+    
     router.push(
-      `/?company_id=${encodeURIComponent(company)}&target=${encodeURIComponent(target)}&base=${encodeURIComponent(base)}`
+      `/?company_id=${encodeURIComponent(company)}` +
+      `&target=${encodeURIComponent(target)}&base=${encodeURIComponent(base)}` +
+      `&ano=${encodeURIComponent(ano)}&trimestre=${encodeURIComponent(trimestre)}&mes=${encodeURIComponent(mes)}`
     );
   };
 
-  const selectClass =
-    "bg-[#1a1a1c] border border-[#27272a] text-white text-sm rounded-lg focus:ring-[#d4af37] focus:border-[#d4af37] block w-full pl-3 pr-9 py-2.5 outline-none appearance-none cursor-pointer transition-colors hover:border-[#d4af37]/50 disabled:opacity-50 disabled:cursor-wait";
+  const selectClass = "bg-[#1a1a1c] border border-[#27272a] text-white text-sm rounded-lg focus:ring-[#d4af37] focus:border-[#d4af37] block w-full pl-3 pr-9 py-2.5 outline-none appearance-none cursor-pointer transition-colors hover:border-[#d4af37]/50 disabled:opacity-50 disabled:cursor-wait";
 
-  // Agrupa as options para o select
-  const renderOptions = () => {
-    const groups = ['Anuais', 'Trimestrais', 'Mensais', 'Gerais'];
-    return groups.map(g => {
-      const opts = filterOptions.filter(o => o.group === g);
-      if (opts.length === 0) return null;
-      return (
-        <optgroup key={g} label={g} className="bg-[#111] text-[#a1a1aa] font-semibold">
-          {opts.map(o => (
-            <option key={`${g}-${o.label}`} value={o.value} className="text-white font-normal bg-[#1a1a1c]">
-              {o.label}
-            </option>
-          ))}
-        </optgroup>
-      );
-    });
+  const getAvailableMonths = () => {
+    if (trimestre === 'Todos') return Object.keys(monthNames);
+    if (trimestre === '1') return ['01', '02', '03'];
+    if (trimestre === '2') return ['04', '05', '06'];
+    if (trimestre === '3') return ['07', '08', '09'];
+    if (trimestre === '4') return ['10', '11', '12'];
+    return [];
   };
 
   return (
@@ -209,51 +189,63 @@ export default function DashboardFilters() {
         </div>
       </div>
 
-      <div className="flex flex-col">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
-          ALVO (PERÍODO ATUAL)
-        </label>
+      <div className="flex flex-col min-w-[120px]">
+        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">Anos</label>
         <div className="relative">
-          <select
-            value={target}
-            onChange={e => setTarget(e.target.value)}
-            disabled={periodsLoading || filterOptions.length === 0}
+          <select 
+            value={ano} 
+            onChange={e => { setAno(e.target.value); setTrimestre('Todos'); setMes('Todos'); }} 
+            disabled={periodsLoading || availableYears.length === 0} 
             className={selectClass}
           >
-            {periodsLoading && <option value="">Carregando...</option>}
-            {!periodsLoading && filterOptions.length === 0 && <option value="">Sem dados</option>}
-            {renderOptions()}
+            {periodsLoading && <option value="">...</option>}
+            {!periodsLoading && availableYears.length === 0 && <option value="">Sem dados</option>}
+            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
         </div>
       </div>
 
-      <div className="flex flex-col">
-        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">
-          BASE (COMPARAR COM)
-        </label>
+      <div className="flex flex-col min-w-[140px]">
+        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">Trimestres</label>
         <div className="relative">
-          <select
-            value={base}
-            onChange={e => setBase(e.target.value)}
-            disabled={periodsLoading || filterOptions.length === 0}
+          <select 
+            value={trimestre} 
+            onChange={e => { setTrimestre(e.target.value); setMes('Todos'); }} 
+            disabled={periodsLoading || !ano} 
             className={selectClass}
           >
-            {periodsLoading && <option value="">Carregando...</option>}
-            {!periodsLoading && filterOptions.length === 0 && <option value="">Sem dados</option>}
-            {renderOptions()}
+            <option value="Todos">Todos</option>
+            <option value="1">1º Trimestre</option>
+            <option value="2">2º Trimestre</option>
+            <option value="3">3º Trimestre</option>
+            <option value="4">4º Trimestre</option>
           </select>
-          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+        </div>
+      </div>
+
+      <div className="flex flex-col min-w-[140px]">
+        <label className="text-[#a1a1aa] text-xs uppercase tracking-wider mb-1.5 font-semibold">Meses</label>
+        <div className="relative">
+          <select 
+            value={mes} 
+            onChange={e => setMes(e.target.value)} 
+            disabled={periodsLoading || !ano} 
+            className={selectClass}
+          >
+            <option value="Todos">Todos</option>
+            {getAvailableMonths().map(m => (
+              <option key={m} value={m}>{monthNames[m]}</option>
+            ))}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#d4af37]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
         </div>
       </div>
 
       <button
         onClick={applyFilters}
-        disabled={!company || loading || periodsLoading || filterOptions.length === 0}
+        disabled={!company || !ano || loading || periodsLoading}
         className="text-black bg-[#d4af37] hover:bg-[#b5952f] disabled:opacity-40 disabled:cursor-not-allowed font-bold rounded-lg text-sm px-6 py-2.5 transition-all h-[42px] shadow-[0_0_15px_rgba(212,175,55,0.2)] hover:shadow-[0_0_20px_rgba(212,175,55,0.35)] active:scale-95"
       >
         Analisar
