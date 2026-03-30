@@ -43,20 +43,20 @@ function DRETableRow({ node, depth = 0 }: { node: DreNode; depth?: number }) {
           </div>
         </td>
         
-        {/* BASE PERIOD */}
-        <td className="py-3 px-4 text-sm text-right text-gray-300">
-          {formatCurrency(node.base_value)}
-        </td>
-        <td className="py-3 px-4 text-sm text-right text-gray-500">
-          {node.base_percentage.toFixed(2)}%
-        </td>
-
         {/* TARGET PERIOD */}
         <td className={`py-3 px-4 text-sm text-right ${depth === 0 ? 'text-white' : 'text-gray-200'}`}>
           {formatCurrency(node.value)}
         </td>
         <td className={`py-3 px-4 text-sm text-right ${depth === 0 ? 'text-[#D4AF37]' : 'text-gray-400'}`}>
           {node.percentage.toFixed(2)}%
+        </td>
+
+        {/* BASE PERIOD */}
+        <td className="py-3 px-4 text-sm text-right text-gray-300">
+          {formatCurrency(node.base_value)}
+        </td>
+        <td className="py-3 px-4 text-sm text-right text-gray-500">
+          {node.base_percentage.toFixed(2)}%
         </td>
 
         {/* ANÁLISE HORIZONTAL */}
@@ -83,10 +83,10 @@ export default function DRETable({ data, targetLabel, baseLabel }: DRETableProps
           <thead>
             <tr className="bg-[#0c0c0c] border-b border-[#27272a] text-[#a1a1aa] text-xs uppercase tracking-wider">
               <th className="py-3 px-4 font-medium">Conta Contábil</th>
-              <th className="py-3 px-4 font-medium text-right text-gray-400">{baseLabel}</th>
-              <th className="py-3 px-4 font-medium text-right text-gray-500">AV% ({baseLabel})</th>
               <th className="py-3 px-4 font-medium text-right text-white">{targetLabel}</th>
               <th className="py-3 px-4 font-medium text-right text-[#D4AF37]">AV% ({targetLabel})</th>
+              <th className="py-3 px-4 font-medium text-right text-gray-400">{baseLabel}</th>
+              <th className="py-3 px-4 font-medium text-right text-gray-500">AV% ({baseLabel})</th>
               <th className="py-3 px-4 font-medium text-right">AH% (Variação)</th>
             </tr>
           </thead>
