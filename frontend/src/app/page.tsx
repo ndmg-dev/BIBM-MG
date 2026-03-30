@@ -39,7 +39,7 @@ export default async function Home(props: { searchParams: Promise<any> | any }) 
     fetchAPI(`/kpis/comparison?target_period=${encodeURIComponent(targetPeriod)}&base_period=${encodeURIComponent(basePeriod)}${companyFilter}`),
     fetchAPI(`/charts/evolution?${companyFilter.replace('&', '')}`),
     fetchAPI(`/charts/composition?period=${encodeURIComponent(targetPeriod)}${companyFilter}`),
-    fetchAPI(`/dre?period=${encodeURIComponent(targetPeriod)}${companyFilter}`),
+    fetchAPI(`/dre?target_period=${encodeURIComponent(targetPeriod)}&base_period=${encodeURIComponent(basePeriod)}${companyFilter}`),
   ]);
 
   // Divide o nome da empresa em palavras para estilizar a última em dourado
