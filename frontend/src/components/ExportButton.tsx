@@ -1,8 +1,6 @@
 'use client';
 import React, { useState } from 'react';
 import { Download, FileText, Table as TableIcon } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { DreNode } from './DRETable';
 
 interface ExportButtonProps {
@@ -14,19 +12,23 @@ interface ExportButtonProps {
 export default function ExportButton({ dreData, companyName, targetPeriod }: ExportButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const flattenDreData = (nodes: DreNode[], depth = 0): any[] => {
-    let result: any[] = [];
+  const safeName = (companyName || 'empresa').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  const safePeriod = (targetPeriod || 'periodo').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+
+  // ─── Flatten DRE tree into flat array for CSV ───
+  const flattenDreData = (nodes: DreNode[], depth = 0): Record<string, string>[] => {
+    let result: Record<string, string>[] = [];
     nodes.forEach(node => {
-      // pad name with spaces according to depth for visual hierarchy in excel
-      const padding = ' '.repeat(depth * 4);
+      const padding = '\u00a0'.repeat(depth * 4); // non-breaking spaces for indentation
       result.push({
         'Conta Contabil': padding + node.account_name,
-        'Alvo (R$)': node.value.toFixed(2),
-        'AV Alvo (%)': node.percentage.toFixed(2) + '%',
-        'Base (R$)': node.base_value.toFixed(2),
-        'AV Base (%)': node.base_percentage.toFixed(2) + '%',
-        'AH Variação (%)': node.ah_percentage.toFixed(2) + '%'
+        'Alvo (R$)': node.value.toFixed(2).replace('.', ','),
+        'AV Alvo (%)': node.percentage.toFixed(2).replace('.', ',') + '%',
+        'Base (R$)': node.base_value.toFixed(2).replace('.', ','),
+        'AV Base (%)': node.base_percentage.toFixed(2).replace('.', ',') + '%',
+        'AH Variacao (%)': node.ah_percentage.toFixed(2).replace('.', ',') + '%',
       });
       if (node.children && node.children.length > 0) {
         result = result.concat(flattenDreData(node.children, depth + 1));
@@ -35,78 +37,102 @@ export default function ExportButton({ dreData, companyName, targetPeriod }: Exp
     return result;
   };
 
+  // ─── CSV Export ───
   const exportCSV = () => {
     const flatData = flattenDreData(dreData);
     if (flatData.length === 0) return;
 
-    // Build CSV string (Excel treats UTF-8 with BOM correctly)
     const headers = Object.keys(flatData[0]);
-    const csvRows = [];
-    csvRows.push(headers.join(';')); // Header row
+    const rows = flatData.map(row => headers.map(h => `"${row[h]}"`).join(';'));
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
 
-    flatData.forEach(row => {
-      const values = headers.map(h => `"${row[h]}"`);
-      csvRows.push(values.join(';'));
-    });
-
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + csvRows.join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    const safeName = companyName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-    const safePeriod = targetPeriod.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-    link.setAttribute('download', `DRE_${safeName}_${safePeriod}.csv`);
+    link.href = url;
+    link.download = `DRE_${safeName}_${safePeriod}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     setIsOpen(false);
   };
 
+  // ─── PDF Export (dynamic imports to avoid SSR crash) ───
   const exportPDF = async () => {
     setLoading(true);
     setIsOpen(false);
-    
-    // We target the main wrapper element
-    const element = document.getElementById('dashboard-export-wrapper');
-    if (!element) {
-      alert("Erro ao localizar conteúdo para PDF.");
-      setLoading(false);
-      return;
-    }
+    setError(null);
 
     try {
-      const canvas = await html2canvas(element, { 
-        scale: 1.5, // 1.5 is enough for reading, keeps file tiny
-        backgroundColor: '#0c0c0c',
-        windowWidth: 1400 // force desktop width rendering
-      });
-      const imgData = canvas.toDataURL('image/png', 0.8);
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      // If it fits in one page, awesome. If it exceeds A4, we must split or just accept the A4 clipping.
-      // Usually Dashboards look great stretched into 1 page vertically if it's not too long.
-      let position = 0;
-      let heightLeft = pdfHeight;
-      const pageHeight = pdf.internal.pageSize.getHeight();
+      // Dynamic imports — only loaded when user clicks, never on SSR
+      const html2canvas = (await import('html2canvas')).default;
+      const jsPDF = (await import('jspdf')).default;
 
-      // For a very long dashboard, we can add pages
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
+      const element = document.getElementById('dashboard-export-wrapper');
+      if (!element) {
+        setError('Elemento do painel não encontrado. Tente novamente.');
+        return;
       }
-      
-      const safeName = companyName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-      pdf.save(`Relatorio_BIMM_MG_${safeName}.pdf`);
+
+      // Temporarily force visibility for capture
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'visible';
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#0c0c0c',
+        useCORS: true,
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+      });
+
+      document.body.style.overflow = originalOverflow;
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
+
+      // Landscape A4 for wide dashboards
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();   // 297mm landscape
+      const pageHeight = pdf.internal.pageSize.getHeight(); // 210mm landscape
+
+      const imgRatio = canvas.height / canvas.width;
+      const imgHeightOnPage = pageWidth * imgRatio;
+
+      // Add header
+      pdf.setFillColor(12, 12, 12);
+      pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+
+      if (imgHeightOnPage <= pageHeight) {
+        // Fits in one page — center vertically
+        const yOffset = (pageHeight - imgHeightOnPage) / 2;
+        pdf.addImage(imgData, 'JPEG', 0, yOffset, pageWidth, imgHeightOnPage);
+      } else {
+        // Multi-page: slice the image
+        let heightLeft = imgHeightOnPage;
+        let srcY = 0;
+        let firstPage = true;
+
+        while (heightLeft > 0) {
+          if (!firstPage) {
+            pdf.addPage();
+            pdf.setFillColor(12, 12, 12);
+            pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+          }
+          pdf.addImage(imgData, 'JPEG', 0, -srcY, pageWidth, imgHeightOnPage);
+          srcY += pageHeight;
+          heightLeft -= pageHeight;
+          firstPage = false;
+        }
+      }
+
+      pdf.save(`Relatorio_BI_${safeName}_${safePeriod}.pdf`);
     } catch (e) {
-      console.error('Error creating PDF', e);
+      console.error('PDF export error:', e);
+      setError('Erro ao gerar PDF. Verifique o console para detalhes.');
     } finally {
       setLoading(false);
     }
@@ -114,42 +140,53 @@ export default function ExportButton({ dreData, companyName, targetPeriod }: Exp
 
   return (
     <div className="relative">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-[#d4af37] text-black px-4 py-2 font-bold rounded-lg hover:bg-[#eacc59] transition-all shadow-[0_0_15px_rgba(212,175,55,0.3)] disabled:opacity-50"
+      <button
+        onClick={() => { setIsOpen(!isOpen); setError(null); }}
+        className="flex items-center gap-2 bg-[#d4af37] text-black px-4 py-2 font-bold rounded-lg hover:bg-[#eacc59] transition-all shadow-[0_0_15px_rgba(212,175,55,0.3)] disabled:opacity-60 text-sm"
         disabled={loading}
       >
-        {loading ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div> : <Download size={18} />}
-        {loading ? 'Gerando...' : 'Exportar Relatório'}
+        {loading
+          ? <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+          : <Download size={16} />
+        }
+        {loading ? 'Gerando PDF...' : 'Exportar'}
       </button>
 
-      {isOpen && (
+      {error && (
+        <div className="absolute top-12 right-0 mt-2 bg-rose-900/80 border border-rose-700 text-rose-200 text-xs rounded-lg px-3 py-2 min-w-[240px] z-50">
+          {error}
+        </div>
+      )}
+
+      {isOpen && !loading && (
         <div className="absolute top-12 right-0 mt-2 bg-[#1a1a1c] border border-[#27272a] rounded-lg shadow-2xl overflow-hidden min-w-[240px] z-50">
           <div className="px-4 py-2 bg-[#111111] border-b border-[#27272a]">
             <span className="text-xs uppercase font-bold tracking-widest text-[#a1a1aa]">Formato de Exportação</span>
           </div>
-          <button 
+
+          <button
             onClick={exportPDF}
             className="w-full text-left px-4 py-3 text-white hover:bg-[#27272a] transition-colors flex items-center gap-3 border-b border-[#27272a] focus:outline-none"
           >
-            <div className="bg-[#d4af37]/10 p-2 rounded-md">
+            <div className="bg-[#d4af37]/10 p-2 rounded-md flex-shrink-0">
               <FileText size={18} className="text-[#d4af37]" />
             </div>
             <div>
               <p className="font-semibold text-sm">Painel Completo (PDF)</p>
-              <p className="text-xs text-[#a1a1aa]">Ideal para impressões</p>
+              <p className="text-xs text-[#a1a1aa]">Snapshot do dashboard atual</p>
             </div>
           </button>
-          <button 
+
+          <button
             onClick={exportCSV}
             className="w-full text-left px-4 py-3 text-white hover:bg-[#27272a] transition-colors flex items-center gap-3 focus:outline-none"
           >
-            <div className="bg-emerald-500/10 p-2 rounded-md">
-               <TableIcon size={18} className="text-emerald-500" />
+            <div className="bg-emerald-500/10 p-2 rounded-md flex-shrink-0">
+              <TableIcon size={18} className="text-emerald-500" />
             </div>
             <div>
-              <p className="font-semibold text-sm">Dados da DRE (Excel)</p>
-              <p className="text-xs text-[#a1a1aa]">Planilha com formato CSV</p>
+              <p className="font-semibold text-sm">Dados da DRE (Excel/CSV)</p>
+              <p className="text-xs text-[#a1a1aa]">Planilha com hierarquia completa</p>
             </div>
           </button>
         </div>
