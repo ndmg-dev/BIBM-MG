@@ -73,6 +73,19 @@ export default function DashboardFilters() {
     return null;
   };
 
+  const buildPeriodLabel = (y: string, t: string, m: string) => {
+    if (!y) return '';
+    if (m !== 'Todos') return `${m}/${y}`;
+    if (t !== 'Todos') {
+      const quarters: Record<string, string[]> = {
+        '1': ['01','02','03'], '2': ['04','05','06'], '3': ['07','08','09'], '4': ['10','11','12']
+      };
+      return quarters[t].map(mm => `${mm}/${y}`).join(',');
+    }
+    const allMonths = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    return allMonths.map(mm => `${mm}/${y}`).join(',');
+  };
+
   useEffect(() => {
     if (!company) { setRawPeriods([]); setAvailableYears([]); return; }
     setPeriodsLoading(true);
@@ -82,50 +95,59 @@ export default function DashboardFilters() {
         const p = data || [];
         setRawPeriods(p);
         
-        const years = Array.from(new Set(p.filter(x => x.includes('/')).map(x => x.split('/')[1]))).sort();
+        const allMonths = p.filter(x => x.includes('/')).sort((a,b) => {
+           const [m1,y1] = a.split('/');
+           const [m2,y2] = b.split('/');
+           return new Date(parseInt(y1), parseInt(m1)-1).getTime() - new Date(parseInt(y2), parseInt(m2)-1).getTime();
+        });
+
+        const years = Array.from(new Set(allMonths.map(x => x.split('/')[1])));
         setAvailableYears(years);
 
-        if (years.length > 0) {
-          // Initialize ALVO
-          if (!alvoAno) {
-            const parsedAlvo = parsePeriodStr(initialTarget, years);
-            if (parsedAlvo && years.includes(parsedAlvo.ano)) {
-              setAlvoAno(parsedAlvo.ano);
-              setAlvoTrim(parsedAlvo.trim);
-              setAlvoMes(parsedAlvo.mes);
-            } else {
-              setAlvoAno(years[years.length - 1]);
-              setAlvoTrim('Todos');
-              setAlvoMes(p.filter(x => x.includes(`/${years[years.length - 1]}`)).map(x=>x.split('/')[0]).pop() || 'Todos');
-            }
-          } else if (!years.includes(alvoAno)) {
-            setAlvoAno(years[years.length - 1]);
-          }
+        if (allMonths.length > 0) {
+           // Helper to check if selection is valid
+           const isValid = (y: string, t: string, m: string) => {
+             const str = buildPeriodLabel(y, t, m);
+             return str && str.split(',').some(month => allMonths.includes(month));
+           };
 
-          // Initialize BASE
-          if (!baseAno) {
-            const parsedBase = parsePeriodStr(initialBase, years);
-            if (parsedBase && years.includes(parsedBase.ano)) {
-              setBaseAno(parsedBase.ano);
-              setBaseTrim(parsedBase.trim);
-              setBaseMes(parsedBase.mes);
-            } else {
-              // Default to previous month
-              const allM = p.filter(x => x.includes('/'));
-              if(allM.length >= 2) {
-                const prev = allM[allM.length-2];
-                setBaseAno(prev.split('/')[1]);
-                setBaseTrim('Todos');
-                setBaseMes(prev.split('/')[0]);
-              } else {
-                setBaseAno(years[years.length - 1]);
-                setBaseTrim('Todos');
-                setBaseMes('Todos');
-              }
-            }
-          } else if (!years.includes(baseAno)) {
-             setBaseAno(years[years.length - 1]);
-          }
+           // Initialize or reset ALVO
+           let finalAlvoAno = alvoAno, finalAlvoTrim = alvoTrim, finalAlvoMes = alvoMes;
+           if (!alvoAno) {
+             const parsedAlvo = parsePeriodStr(initialTarget, years);
+             if (parsedAlvo && isValid(parsedAlvo.ano, parsedAlvo.trim, parsedAlvo.mes)) {
+               finalAlvoAno = parsedAlvo.ano; finalAlvoTrim = parsedAlvo.trim; finalAlvoMes = parsedAlvo.mes;
+             }
+           }
+           
+           if (!finalAlvoAno || !isValid(finalAlvoAno, finalAlvoTrim, finalAlvoMes)) {
+               const latest = allMonths[allMonths.length - 1];
+               const [lm, ly] = latest.split('/');
+               finalAlvoAno = ly; finalAlvoTrim = 'Todos'; finalAlvoMes = lm;
+           }
+
+           setAlvoAno(finalAlvoAno);
+           setAlvoTrim(finalAlvoTrim);
+           setAlvoMes(finalAlvoMes);
+
+           // Initialize or reset BASE
+           let finalBaseAno = baseAno, finalBaseTrim = baseTrim, finalBaseMes = baseMes;
+           if (!baseAno) {
+             const parsedBase = parsePeriodStr(initialBase, years);
+             if (parsedBase && isValid(parsedBase.ano, parsedBase.trim, parsedBase.mes)) {
+               finalBaseAno = parsedBase.ano; finalBaseTrim = parsedBase.trim; finalBaseMes = parsedBase.mes;
+             }
+           }
+
+           if (!finalBaseAno || !isValid(finalBaseAno, finalBaseTrim, finalBaseMes)) {
+               const prev = allMonths.length > 1 ? allMonths[allMonths.length - 2] : allMonths[allMonths.length - 1];
+               const [pm, py] = prev.split('/');
+               finalBaseAno = py; finalBaseTrim = 'Todos'; finalBaseMes = pm;
+           }
+
+           setBaseAno(finalBaseAno);
+           setBaseTrim(finalBaseTrim);
+           setBaseMes(finalBaseMes);
         }
       })
       .catch(() => { setRawPeriods([]); setAvailableYears([]); })
@@ -150,17 +172,7 @@ export default function DashboardFilters() {
     '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro',
   };
 
-  const buildPeriodLabel = (y: string, t: string, m: string) => {
-    if (m !== 'Todos') return `${m}/${y}`;
-    if (t !== 'Todos') {
-      const quarters: Record<string, string[]> = {
-        '1': ['01','02','03'], '2': ['04','05','06'], '3': ['07','08','09'], '4': ['10','11','12']
-      };
-      return quarters[t].map(mm => `${mm}/${y}`).join(',');
-    }
-    const allMonths = ['01','02','03','04','05','06','07','08','09','10','11','12'];
-    return allMonths.map(mm => `${mm}/${y}`).join(',');
-  };
+
 
   const applyFilters = () => {
     if (!company || !alvoAno || !baseAno) return;
