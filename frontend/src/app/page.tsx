@@ -3,10 +3,9 @@ import DRETable from '@/components/DRETable';
 import EvolutionChart from '@/components/EvolutionChart';
 import CompositionChart from '@/components/CompositionChart';
 import DashboardFilters from '@/components/DashboardFilters';
+import ExportButton from '@/components/ExportButton';
 
-const API_BASE = process.env.NODE_ENV === 'production'
-  ? 'http://backend:8000/api/v1'
-  : 'http://localhost:8000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 async function fetchAPI(endpoint: string) {
   try {
@@ -72,12 +71,21 @@ export default async function Home(props: { searchParams: Promise<any> | any }) 
           </h1>
           <p className="text-[#a1a1aa] text-sm hidden sm:block">Painel Executivo e D.R.E. Analítica</p>
         </div>
-        <div className="h-10 w-10 bg-[#1a1a1c] border border-[#d4af37]/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.15)]">
-          <span className="text-[#D4AF37] font-bold text-sm">MG</span>
+        <div className="flex items-center gap-4">
+          {companyId && dreTree?.length > 0 && (
+            <ExportButton 
+              dreData={dreTree} 
+              companyName={companyName} 
+              targetPeriod={targetLabelName} 
+            />
+          )}
+          <div className="h-10 w-10 bg-[#1a1a1c] border border-[#d4af37]/30 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.15)] flex-shrink-0">
+            <span className="text-[#D4AF37] font-bold text-sm">MG</span>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto space-y-8">
+      <main id="dashboard-export-wrapper" className="max-w-7xl mx-auto space-y-8">
         <DashboardFilters />
 
         {!companyId ? (

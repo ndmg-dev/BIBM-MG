@@ -247,3 +247,38 @@ def get_dre_tree(target_period: str = "01/2026", base_period: str = "02/2026", c
             tree.append(node)
 
     return tree
+
+@router.get("/dre/account_history", summary="Histórico temporal de uma conta")
+def get_account_history(account_name: str, company_id: str = ""):
+    query = supabase.table('dre_records').select('*').eq('account_name', account_name.strip())
+    if company_id:
+        query = query.eq('company_id', company_id)
+    res = query.execute()
+
+    if not res.data:
+        return []
+
+    agg = {}
+    for r in res.data:
+        p = r.get('period')
+        if not p: continue
+        if p not in agg:
+            agg[p] = 0.0
+        # If value is string, convert it
+        try:
+            agg[p] += float(r.get('value', 0))
+        except (ValueError, TypeError):
+            pass
+
+    result = [{"period": p, "value": val} for p, val in agg.items()]
+
+    # Ordena "MM/YYYY" como (YYYY, MM)
+    result.sort(
+        key=lambda r: (
+            (int(r["period"].split('/')[1]), int(r["period"].split('/')[0]))
+            if '/' in r["period"] and len(r["period"].split('/')) == 2 and r["period"].split('/')[0].isdigit() and r["period"].split('/')[1].isdigit()
+            else (9999, 99)
+        )
+    )
+
+    return result

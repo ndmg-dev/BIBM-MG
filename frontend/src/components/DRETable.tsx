@@ -1,5 +1,8 @@
 'use client';
 import React, { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ChevronRight, ChevronDown, Activity } from 'lucide-react';
+import DrillDownModal from './DrillDownModal';
 
 export interface DreNode {
   account_name: string;
@@ -11,6 +14,12 @@ export interface DreNode {
   children: DreNode[];
 }
 
+interface DRETableContextProps {
+  onAccountClick?: (node: DreNode) => void;
+}
+
+const DRETableContext = React.createContext<DRETableContextProps | null>(null);
+
 interface DRETableProps {
   data: DreNode[];
   targetLabel: string;
@@ -20,26 +29,34 @@ interface DRETableProps {
 function DRETableRow({ node, depth = 0 }: { node: DreNode; depth?: number }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasChildren = node.children && node.children.length > 0;
+  
+  const context = React.useContext(DRETableContext);
+  const onAccountClick = context?.onAccountClick;
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
     <>
-      <tr 
-        className={`border-b border-[#27272a] hover:bg-[#202022] transition-colors ${depth === 0 ? 'bg-[#151515] font-semibold' : ''}`}
-        onClick={() => hasChildren && setIsExpanded(!isExpanded)}
-        style={{ cursor: hasChildren ? 'pointer' : 'default' }}
-      >
-        <td className="py-3 px-4 text-sm text-gray-200" style={{ paddingLeft: `${(depth * 1.5) + 1}rem` }}>
-          <div className="flex items-center">
+      <tr className={`border-b border-[#27272a] ${depth === 0 ? 'bg-[#1a1a1c]' : 'bg-[#111111] hover:bg-[#1a1a1c] transition-colors'}`}>
+        <td className="p-3 font-semibold flex items-center gap-2 group cursor-pointer" onClick={() => onAccountClick && onAccountClick(node)}>
+          <div style={{ marginLeft: `${depth * 16}px` }} className="flex items-center gap-2 w-full">
             {hasChildren && (
-              <span className="mr-2 text-[#D4AF37] text-xs w-4">
-                {isExpanded ? '▼' : '▶'}
-              </span>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(!isExpanded);
+                }} 
+                className="text-[#a1a1aa] hover:text-white focus:outline-none"
+              >
+                {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </button>
             )}
-            {!hasChildren && <span className="mr-2 w-4"></span>}
-            <span className={depth === 0 ? 'text-[#D4AF37]' : ''}>{node.account_name}</span>
+            {!hasChildren && <span className="w-4" />}
+            <span className={`flex-1 transition-colors ${depth === 0 ? 'text-[#d4af37]' : 'text-[#e4e4e7] group-hover:text-[#d4af37]'}`}>
+              {node.account_name}
+            </span>
+            <Activity size={14} className="opacity-0 group-hover:opacity-100 text-[#d4af37] transition-opacity mr-2" />
           </div>
         </td>
         
@@ -72,31 +89,53 @@ function DRETableRow({ node, depth = 0 }: { node: DreNode; depth?: number }) {
 }
 
 export default function DRETable({ data, targetLabel, baseLabel }: DRETableProps) {
+  const searchParams = useSearchParams();
+  const companyId = searchParams?.get('company_id') || '';
+  const [drilldownAccount, setDrilldownAccount] = useState<DreNode | null>(null);
+
+  if (!data || data.length === 0) return null;
+
+  const handleAccountClick = (node: DreNode) => {
+    setDrilldownAccount(node);
+  };
+
   return (
-    <div className="bg-[#1a1a1c] border border-[#27272a] rounded-xl overflow-hidden shadow-2xl">
-      <div className="p-5 border-b border-[#27272a] flex justify-between items-center bg-[#151517]">
-        <h2 className="text-white font-semibold text-lg">Demonstração do Resultado Analítica</h2>
-        <span className="text-[#a1a1aa] text-sm hidden md:block">Comparativo Múltiplos Períodos</span>
+    <DRETableContext.Provider value={{ onAccountClick: handleAccountClick }}>
+      <div className="bg-[#1a1a1c] border border-[#27272a] rounded-xl overflow-hidden shadow-2xl">
+        <div className="p-5 border-b border-[#27272a] flex justify-between items-center bg-[#151517]">
+          <h2 className="text-white font-semibold text-lg">Demonstração do Resultado Analítica</h2>
+          <span className="text-[#a1a1aa] text-sm hidden md:block">Comparativo Múltiplos Períodos</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead>
+              <tr className="bg-[#0c0c0c] border-b border-[#27272a] text-[#a1a1aa] text-xs uppercase tracking-wider">
+                <th className="py-3 px-4 font-medium">Conta Contábil</th>
+                <th className="py-3 px-4 font-medium text-right text-white">{targetLabel}</th>
+                <th className="py-3 px-4 font-medium text-right text-[#D4AF37]">AV% ({targetLabel})</th>
+                <th className="py-3 px-4 font-medium text-right text-gray-400">{baseLabel}</th>
+                <th className="py-3 px-4 font-medium text-right text-gray-500">AV% ({baseLabel})</th>
+                <th className="py-3 px-4 font-medium text-right">AH% (Variação)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((node, idx) => (
+                <DRETableRow key={idx} node={node} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {drilldownAccount && (
+          <DrillDownModal 
+            accountName={drilldownAccount.account_name} 
+            companyId={companyId} 
+            onClose={() => setDrilldownAccount(null)}
+            baseValue={drilldownAccount.base_value}
+            targetValue={drilldownAccount.value}
+          />
+        )}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[800px]">
-          <thead>
-            <tr className="bg-[#0c0c0c] border-b border-[#27272a] text-[#a1a1aa] text-xs uppercase tracking-wider">
-              <th className="py-3 px-4 font-medium">Conta Contábil</th>
-              <th className="py-3 px-4 font-medium text-right text-white">{targetLabel}</th>
-              <th className="py-3 px-4 font-medium text-right text-[#D4AF37]">AV% ({targetLabel})</th>
-              <th className="py-3 px-4 font-medium text-right text-gray-400">{baseLabel}</th>
-              <th className="py-3 px-4 font-medium text-right text-gray-500">AV% ({baseLabel})</th>
-              <th className="py-3 px-4 font-medium text-right">AH% (Variação)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((node, idx) => (
-              <DRETableRow key={idx} node={node} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </DRETableContext.Provider>
   );
 }
