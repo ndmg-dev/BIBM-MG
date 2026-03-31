@@ -1,0 +1,31 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Roda a cada 4 dias às 08:00 UTC (05:00 Brasilia)
+    # Formato cron: minuto hora dia-do-mes mes dia-da-semana
+    - cron: '0 8 */4 * *'
+  workflow_dispatch: # Permite acionar manualmente pelo painel do GitHub
+
+jobs:
+  ping:
+    name: Ping Supabase (prevent inactivity pause)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Query Supabase REST API
+        run: |
+          HTTP_STATUS=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            --request GET \
+            "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/companies?select=id&limit=1" \
+            --header "apikey: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
+            --header "Authorization: Bearer ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}")
+
+          echo "Supabase response status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Supabase is active and responding correctly."
+          else
+            echo "Unexpected status code: $HTTP_STATUS"
+            exit 1
+          fi
